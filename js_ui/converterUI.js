@@ -4,6 +4,10 @@ import {
     convertAndDownload,
 } from "../js/converter.js";
 
+import {
+    createBiliFetcher,
+} from "./bilifetch.js";
+
 const converterPlatforms = {
     bilibili: {
         name: "Bilibili",
@@ -28,9 +32,7 @@ const converterPlatforms = {
 };
 
 if (!menuBar) {
-    throw new Error(
-        'Missing "#nwMenuBar" element.'
-    );
+    throw new Error('Missing "#nwMenuBar" element.');
 }
 
 let activeConverter = null;
@@ -55,6 +57,14 @@ function createConverterMenu() {
         </button>
 
         <div class="menu-popup">
+            <button
+                class="menu-item"
+                type="button"
+                data-platform="bilibili-fetch"
+            >
+                BilibiliFetch
+            </button>
+
             <button
                 class="menu-item"
                 type="button"
@@ -87,26 +97,20 @@ function createConverterMenu() {
 }
 
 function setupMenu(menu) {
-    const button =
-        menu.querySelector(".menu-button");
+    const button = menu.querySelector(".menu-button");
 
     button.addEventListener("click", event => {
         event.stopPropagation();
 
-        const open =
-            menu.classList.contains("open");
+        const open = menu.classList.contains("open");
 
         closeMenus();
 
-        menu.classList.toggle(
-            "open",
-            !open,
-        );
+        menu.classList.toggle("open", !open);
     });
 
     menu.addEventListener("click", event => {
-        const item =
-            event.target.closest(".menu-item");
+        const item = event.target.closest(".menu-item");
 
         if (!item) {
             return;
@@ -114,25 +118,25 @@ function setupMenu(menu) {
 
         closeMenus();
 
-        const platform =
-            item.dataset.platform;
+        const platform = item.dataset.platform;
+
+        if (platform === "bilibili-fetch") {
+            void createBiliFetcher();
+            return;
+        }
 
         openConverter(platform);
     });
 }
 
 async function createConverterOverlay(platform) {
-    const config =
-        converterPlatforms[platform];
+    const config = converterPlatforms[platform];
 
     if (!config) {
-        throw new Error(
-            `Unknown converter platform: ${platform}`
-        );
+        throw new Error(`Unknown converter platform: ${platform}`);
     }
 
-    const response =
-        await fetch("./templ/converter.html");
+    const response = await fetch("./templ/converter.html");
 
     if (!response.ok) {
         throw new Error(
@@ -141,40 +145,25 @@ async function createConverterOverlay(platform) {
         );
     }
 
-    const html =
-        await response.text();
+    const html = await response.text();
 
-    const template =
-        document.createElement("template");
+    const template = document.createElement("template");
 
     template.innerHTML = html.trim();
 
-    const overlay =
-        template.content.firstElementChild;
+    const overlay = template.content.firstElementChild;
 
     if (!overlay) {
-        throw new Error(
-            "Converter template is empty."
-        );
+        throw new Error("Converter template is empty.");
     }
 
-    const platformName =
-        overlay.querySelector("#convPName");
-
-    const input =
-        overlay.querySelector("#converterFile");
-
-    const convertButton =
-        overlay.querySelector("#converterButton");
-
-    const cancelButton =
-        overlay.querySelector("#converterCancelButton");
-
-    const status =
-        overlay.querySelector("#converterStatus");
-
-    const fileHint =
-        overlay.querySelector("#converterFileHint");
+    const platformName = overlay.querySelector("#convPName");
+    const input = overlay.querySelector("#converterFile");
+    const convertButton = overlay.querySelector("#converterButton");
+    const cancelButton = overlay.querySelector("#converterCancelButton");
+    const status = overlay.querySelector("#converterStatus");
+    const fileHint = overlay.querySelector("#converterFileHint");
+    const legacyMode = overlay.querySelector("#legacy");
 
     if (
         !platformName ||
@@ -182,28 +171,23 @@ async function createConverterOverlay(platform) {
         !convertButton ||
         !cancelButton ||
         !status ||
-        !fileHint
+        !fileHint ||
+        !legacyMode
     ) {
         throw new Error(
             "Converter template is missing required elements."
         );
     }
 
-    platformName.textContent =
-        config.name;
-
-    input.accept =
-        config.accept;
-
-    input.multiple =
-        config.multiple;
-
-    fileHint.textContent =
-        config.hint;
+    platformName.textContent = config.name;
+    input.accept = config.accept;
+    input.multiple = config.multiple;
+    fileHint.textContent = config.hint;
 
     return {
         overlay,
         input,
+        legacyMode,
         convertButton,
         cancelButton,
         status,
@@ -211,114 +195,79 @@ async function createConverterOverlay(platform) {
 }
 
 function updateInputText(input) {
-    const dropZone =
-        input.closest(".drop-zone");
+    const dropZone = input.closest(".drop-zone");
 
     if (!dropZone) {
         return;
     }
 
-    const span =
-        dropZone.querySelector("span");
+    const span = dropZone.querySelector("span");
 
     if (!span) {
         return;
     }
 
     if (!input.files.length) {
-        span.textContent =
-            "Click or drag the comments file here";
-
+        span.textContent = "Click or drag the comments file here";
         return;
     }
 
     if (input.files.length === 1) {
-        span.textContent =
-            input.files[0].name;
-
+        span.textContent = input.files[0].name;
         return;
     }
 
-    span.textContent =
-        `${input.files.length} files selected`;
+    span.textContent = `${input.files.length} files selected`;
 }
 
 function setupDropZone(input) {
-    const dropZone =
-        input.closest(".drop-zone");
+    const dropZone = input.closest(".drop-zone");
 
     if (!dropZone) {
         return;
     }
 
-    input.addEventListener(
-        "change",
-        () => {
-            updateInputText(input);
-        },
-    );
+    input.addEventListener("change", () => {
+        updateInputText(input);
+    });
 
-    dropZone.addEventListener(
-        "dragover",
-        event => {
-            event.preventDefault();
+    dropZone.addEventListener("dragover", event => {
+        event.preventDefault();
 
-            dropZone.classList.add(
-                "dragover",
-            );
-        },
-    );
+        dropZone.classList.add("dragover");
+    });
 
-    dropZone.addEventListener(
-        "dragleave",
-        event => {
-            if (
-                !dropZone.contains(
-                    event.relatedTarget,
-                )
-            ) {
-                dropZone.classList.remove(
-                    "dragover",
-                );
-            }
-        },
-    );
+    dropZone.addEventListener("dragleave", event => {
+        if (!dropZone.contains(event.relatedTarget)) {
+            dropZone.classList.remove("dragover");
+        }
+    });
 
-    dropZone.addEventListener(
-        "drop",
-        event => {
-            event.preventDefault();
+    dropZone.addEventListener("drop", event => {
+        event.preventDefault();
 
-            dropZone.classList.remove(
-                "dragover",
-            );
+        dropZone.classList.remove("dragover");
 
-            const files = [
-                ...event.dataTransfer.files,
-            ];
+        const files = [...event.dataTransfer.files];
 
-            if (!files.length) {
-                return;
-            }
+        if (!files.length) {
+            return;
+        }
 
-            const transfer =
-                new DataTransfer();
+        const transfer = new DataTransfer();
 
-            const selected =
-                input.multiple
-                    ? files
-                    : files.slice(0, 1);
+        const selected = input.multiple
+            ? files
+            : files.slice(0, 1);
 
-            for (const file of selected) {
-                transfer.items.add(file);
-            }
+        for (const file of selected) {
+            transfer.items.add(file);
+        }
 
-            input.files =
-                transfer.files;
+        input.files = transfer.files;
 
-            updateInputText(input);
-        },
-    );
+        updateInputText(input);
+    });
 }
 
 function closeConverter() {
@@ -350,74 +299,65 @@ async function openConverter(platform) {
     }
 
     try {
-        const ui =
-            await createConverterOverlay(
-                platform,
-            );
+        const ui = await createConverterOverlay(platform);
 
         activeConverter = ui;
 
         ui.overlay.hidden = false;
 
-        document.body.appendChild(
-            ui.overlay,
-        );
+        document.body.appendChild(ui.overlay);
 
-        setupDropZone(
-            ui.input,
-        );
+        setupDropZone(ui.input);
 
-        ui.cancelButton.addEventListener(
-            "click",
-            closeConverter,
-        );
+        ui.cancelButton.addEventListener("click", closeConverter);
 
-        ui.convertButton.addEventListener(
-            "click",
-            () => {
-                void convertAndDownload(
-                    platform,
-                    [...ui.input.files],
-                    `${platform}-${timestamp()}-danma.jsonl.gz`,
-                    message => {
-                        ui.status.textContent = message;
-                    },
-                ).then(
-                    () => {
-                        ui.convertButton.disabled = false;
-                        ui.cancelButton.disabled = false;
-                    },
-                ).catch(
-                    error => {
-                        console.error(error);
+        ui.convertButton.addEventListener("click", event => {
+            event.preventDefault();
 
-                        ui.status.textContent =
-                            `Conversion failed: ${error.message}`;
+            if (!ui.input.files.length) {
+                ui.status.textContent = "Please select a file first.";
+                return;
+            }
 
-                        ui.convertButton.disabled = false;
-                        ui.cancelButton.disabled = false;
-                    },
-                );
-            },
-        );
+            ui.convertButton.disabled = true;
+            ui.cancelButton.disabled = true;
+
+            void convertAndDownload(
+                platform,
+                [...ui.input.files],
+                ui.legacyMode.checked,
+                `${platform}-${timestamp()}-danma.jsonl.gz`,
+                message => {
+                    ui.status.textContent = message;
+                },
+            ).then(
+                () => {
+                    ui.convertButton.disabled = false;
+                    ui.cancelButton.disabled = false;
+                },
+            ).catch(
+                error => {
+                    console.error(error);
+
+                    ui.status.textContent =
+                        `Conversion failed: ${error.message}`;
+
+                    ui.convertButton.disabled = false;
+                    ui.cancelButton.disabled = false;
+                },
+            );
+        });
     } catch (error) {
-        console.error(
-            "Failed to open converter:",
-            error,
-        );
+        console.error("Failed to open converter:", error);
     }
 }
 
-const converterMenu =
-    createConverterMenu();
+const converterMenu = createConverterMenu();
 
 setupMenu(converterMenu);
 
-document.addEventListener(
-    "click",
-    event => {
-        if (!converterMenu.contains(event.target)) {
-            closeMenus();
-        }
-    },
-);
+document.addEventListener("click", event => {
+    if (!converterMenu.contains(event.target)) {
+        closeMenus();
+    }
+});

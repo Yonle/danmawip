@@ -1,0 +1,65 @@
+<div class="loaderOverlay" hidden>
+    <div class="loader converter">
+        <h2>Fetch Bilibili danmaku</h2>
+
+        <div>
+            <label for="biliVideoId">
+                Video ID
+            </label>
+
+            <input
+                id="biliVideoId"
+                type="text"
+                placeholder="BV1..."
+                autocomplete="off"
+            >
+        </div>
+
+        <div>
+            <label for="biliPage">
+                Page
+            </label>
+
+            <input
+                id="biliPage"
+                type="number"
+                min="1"
+                step="1"
+                value="1"
+            >
+        </div>
+
+        <label class="checkbox-row">
+            <input
+                type="checkbox"
+                id="biliLegacy"
+            >
+
+            <span>
+                Apply legacy fixes
+            </span>
+        </label>
+
+        <div class="loader-actions">
+            <button
+                id="biliFetchButton"
+                type="button"
+                class="buttonh"
+            >
+                Fetch
+            </button>
+
+            <button
+                id="biliFetchCancelButton"
+                type="button"
+            >
+                Cancel
+            </button>
+        </div>
+
+        <div
+            id="biliFetchStatus"
+            class="loader-status"
+        ></div>
+    </div>
+</div>

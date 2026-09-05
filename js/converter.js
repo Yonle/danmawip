@@ -2,6 +2,7 @@ const {
     BiliBili,
     Niconico,
     YouTubeChat,
+    LegacyFix,
 } = require("../modules/dankomaconv.js");
 
 const converters = {
@@ -51,6 +52,7 @@ async function gzipBlob(blob) {
 export async function convert(
     platform,
     files,
+    legacyMode = false,
     onStatus = null,
 ) {
     const Converter =
@@ -65,7 +67,8 @@ export async function convert(
     const converter =
         new Converter();
 
-    const chunks = [];
+    let output =
+        converter;
 
     converter.on("diagnostic", message => {
         console.warn(
@@ -77,7 +80,29 @@ export async function convert(
         );
     });
 
-    converter.on("data", chunk => {
+    if (legacyMode) {
+        const legacy =
+            new LegacyFix();
+
+        legacy.on("diagnostic", message => {
+            console.warn(
+                `[legacy] ${message}`
+            );
+
+            onStatus?.(
+                String(message),
+            );
+        });
+
+        output =
+            converter.pipe(
+                legacy,
+            );
+    }
+
+    const chunks = [];
+
+    output.on("data", chunk => {
         chunks.push(
             Buffer.from(chunk),
         );
@@ -85,12 +110,12 @@ export async function convert(
 
     const finished = new Promise(
         (resolve, reject) => {
-            converter.once(
+            output.once(
                 "finish",
                 resolve,
             );
 
-            converter.once(
+            output.once(
                 "error",
                 reject,
             );
@@ -149,9 +174,79 @@ export async function convert(
     );
 }
 
+function collectStream(input, onStatus = null) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+
+        input.on("data", chunk => {
+            chunks.push(Buffer.from(chunk));
+        });
+
+        input.once("end", () => {
+            resolve(new Blob(
+                chunks,
+                {
+                    type: "application/jsonl",
+                },
+            ));
+        });
+
+        input.once("error", reject);
+
+        input.on("diagnostic", message => {
+            console.warn(`[stream] ${message}`);
+
+            onStatus?.(
+                String(message),
+            );
+        });
+    });
+}
+
+export async function convertStream(
+    format,
+    input,
+    legacyMode = false,
+    onStatus = null,
+) {
+    if (format !== "dankoma") {
+        throw new Error(
+            `Unsupported stream format: ${format}`,
+        );
+    }
+
+    if (!input || typeof input.on !== "function") {
+        throw new TypeError(
+            "input must be a Node.js readable stream",
+        );
+    }
+
+    let output = input;
+
+    if (legacyMode) {
+        const legacy = new LegacyFix();
+
+        legacy.on("diagnostic", message => {
+            console.warn(`[legacy] ${message}`);
+
+            onStatus?.(
+                String(message),
+            );
+        });
+
+        output = input.pipe(legacy);
+    }
+
+    return collectStream(
+        output,
+        onStatus,
+    );
+}
+
 export async function convertAndDownload(
     platform,
     files,
+    legacyMode = false,
     filename = "danma.jsonl.gz",
     onStatus = null,
 ) {
@@ -159,6 +254,57 @@ export async function convertAndDownload(
         await convert(
             platform,
             files,
+            legacyMode,
+            onStatus,
+        );
+
+    onStatus?.(
+        "Compressing with gzip...",
+    );
+
+    const blob =
+        await gzipBlob(jsonl);
+
+    onStatus?.(
+        "Preparing download...",
+    );
+
+    const url =
+        URL.createObjectURL(blob);
+
+    const a =
+        document.createElement("a");
+
+    a.href = url;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 0);
+
+    onStatus?.(
+        "Conversion complete.",
+    );
+
+    return blob;
+}
+
+export async function convertStreamAndDownload(
+    format,
+    input,
+    legacyMode = false,
+    filename = "danma.jsonl.gz",
+    onStatus = null,
+) {
+    const jsonl =
+        await convertStream(
+            format,
+            input,
+            legacyMode,
             onStatus,
         );
 

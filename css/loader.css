@@ -178,3 +178,27 @@
 
     opacity: 0.7;
 }
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    cursor: pointer;
+}
+
+.checkbox-row input {
+    margin: 0;
+}
+
+input[type="text"],
+input[type="number"] {
+    background: #111;
+    color: #fff;
+    border: 1px solid #333;
+    outline: none;
+    padding: 8px 10px;
+    font-size: 16px;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
